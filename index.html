@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Табачная полка</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--bg:#16161a;--card:#222228;--tx:#f2f2f2;--mut:#9a9aa5;--ac:#e8a33d;--br:#33333b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:-apple-system,"Segoe UI",sans-serif}
+#app{max-width:520px;margin:0 auto;padding:12px 12px 90px}
+.top{display:flex;gap:8px;align-items:center}.top h2{margin:0;flex:1;font-size:20px}.top span{font-size:13px;color:var(--mut)}
+input,select,textarea{width:100%;padding:11px;margin:4px 0;font-size:16px;color:var(--tx);background:var(--card);border:1px solid var(--br);border-radius:10px}
+textarea{min-height:70px}
+label{display:block;margin-top:8px;font-size:13px;color:var(--mut)}
+.btn{padding:11px 14px;font-size:15px;color:var(--tx);background:var(--card);border:1px solid var(--br);border-radius:10px}
+.pri{background:var(--ac);color:#111;border-color:var(--ac);font-weight:600}
+.row{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
+.btns{display:flex;gap:8px;margin-top:10px}.btns .btn{flex:1}
+.card{background:var(--card);border:1px solid var(--br);border-radius:12px;padding:12px;margin:10px 0}
+.ttl{font-size:18px;font-weight:600}.sub{color:var(--mut);font-size:13px;margin-top:2px}.st{font-size:14px;margin-top:6px}
+.tier{min-width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;color:#111}
+.tA{background:#3fb950}.tB{background:#8bc34a}.tC{background:#e8c53d}.tD{background:#e8873d}.tE{background:#e5534b}
+details{margin-top:8px;font-size:14px}.cm{margin:6px 0;color:var(--mut)}
+.seg{display:flex;gap:6px}.seg button{flex:1;padding:10px 4px;font-size:15px;color:var(--tx);background:var(--card);border:1px solid var(--br);border-radius:10px}
+.seg button.on{background:var(--ac);color:#111;border-color:var(--ac);font-weight:600}
+.rng{display:flex;align-items:center;gap:12px}.rng input{padding:0}.rng b{min-width:24px;text-align:right;font-size:18px}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#1c1c21;border-top:1px solid var(--br);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;padding:14px 2px;font-size:13px;color:var(--mut);background:none;border:0}nav button.on{color:var(--ac);font-weight:700}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;z-index:5}
+#ov2{z-index:6}
+.sheet{background:var(--bg);width:100%;max-width:520px;max-height:92vh;overflow:auto;padding:16px;border-radius:16px 16px 0 0}
+.empty{text-align:center;color:var(--mut);padding:24px}
+#msg{margin-top:8px;text-align:center;font-size:14px;color:#e5534b;min-height:18px}
+#toast{position:fixed;left:12px;right:12px;bottom:70px;background:#e5534b;color:#fff;padding:10px;border-radius:10px;display:none;z-index:9;text-align:center}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="top"><h2>Табачная полка</h2><span id="me"></span></div>
+  <div id="main"></div>
+</div>
+<nav id="nav"></nav>
+<div id="toast"></div>
+
+<div class="ov" id="ov"><div class="sheet">
+  <h3 id="ft"></h3>
+  <div id="g_base">
+    <label>Бренд</label><select id="brand" onchange="onBrand()"></select>
+    <label>Линейка</label><select id="line"></select>
+    <label>Название</label><input id="title" placeholder="Название табака">
+  </div>
+  <div id="g_dir"><label>Направление</label><select id="dir"></select></div>
+  <div id="g_flavor"><label>Вкус</label><input id="flavor" placeholder="Например: малина, сливки"></div>
+  <div id="g_str"><label>Крепость</label><div class="rng"><input id="str" type="range" min="1" max="10" value="5" oninput="sv(this)"><b>5</b></div></div>
+  <div id="g_score"><label>Оценка</label><div class="rng"><input id="score" type="range" min="1" max="10" value="5" oninput="sv(this)"><b>5</b></div></div>
+  <div id="g_tier"><label>Тир</label><div class="seg" id="tierSeg"></div></div>
+  <div id="g_take"><label>Брать</label><div class="seg" id="takeSeg"></div></div>
+  <div id="g_comment"><label>Комментарий</label><textarea id="comment"></textarea></div>
+  <div id="msg"></div>
+  <div class="btns"><button class="btn" onclick="closeForm()">Отмена</button><button class="btn pri" id="save" onclick="submit()">Сохранить</button></div>
+</div></div>
+<div class="ov" id="ov2"><div class="sheet" id="sheet2"></div></div>
+
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbzeOPsm6cJUuF8ZcHbMZ1LhTg9A20QIKlVpcsBpB4t5qAMAIcttyln29SxhShYuKi31/exec';
+const CATALOG = {
+  "AFZAL": [],
+  "ANTAGONIST": [],
+  "BANGER": [],
+  "BLACK BURN": ["Classic", "Hit"],
+  "BLISS": [],
+  "BONCE": ["Classic", "Select"],
+  "BURN": [],
+  "CHABACCO": ["Emotions", "Limited Edition", "Medium", "Mix"],
+  "DARKSIDE": ["Core", "Sabotage", "Shot", "Xperience"],
+  "DEUS": ["Classic", "Cigar", "Parfume", "Hookah Cigar"],
+  "DOGMA": ["Classic", "LE"],
+  "DZEN ROLL": [],
+  "ENDORPHIN": [],
+  "FRIGATE": [],
+  "HOOK": [],
+  "JENT": ["Alcohol", "Cigar", "Classic", "Herbal"],
+  "JOY": [],
+  "KA RAI": [],
+  "KRAKEN": [],
+  "MARINAGE": [],
+  "MORPHEUS": [],
+  "MUASSEL": ["Medium", "Strong"],
+  "MUSTHAVE": [],
+  "NАШ": ["Black", "Cigar", "White"],
+  "NUR": [],
+  "ORIGINAL": [],
+  "OVEN": [],
+  "OVERDOSE": [],
+  "PALITRA": ["Classic", "Heavy", "LE"],
+  "SAPHIRE CROWN": [],
+  "SATYR": [],
+  "SEBERO": ["Arctic Mix", "Black", "Classic", "Limited Edition", "Гид"],
+  "SNOBLESS": [],
+  "SPECTRUM": ["Classic", "Hard", "Medium", "Mix"],
+  "STARLINE": [],
+  "TAKE": [],
+  "TROFIMOFF'S": ["Burley", "Cigarro", "No aroma", "Terror"],
+  "БАЗА": ["Покрепче", "Полегче"],
+  "ДУША": [],
+  "САРМА": ["Крепкая", "Легкая", "Classic"],
+  "СЕВЕРНЫЙ": ["Neo", "Professional", "Sorbet", "Classic"],
+  "ХУЛИГАН": ["Зомби", "Зомби Hard", "Classic", "Classic Hard", "Поп"]
+};
+const DIRS = ['Фрукты', 'Ягоды', 'Десертка', 'Выпечка', 'Травянистость', 'Алкоголь', 'Безаромка', 'Бустер'];
+const TIERS = ['A', 'B', 'C', 'D', 'E'];
+const TAKE = ['Да', 'Нет'];
+const LBL = { shelf: 'на полке', order: 'в «Заказать»', try: 'в «Попробовать»', archive: 'в архиве' };
+const MODES = {
+  shelf: { t: 'Добавить на полку', g: ['base', 'dir'] },
+  exp: { t: 'Эксперимент', g: ['base', 'dir', 'flavor', 'score', 'take', 'comment'] },
+  wish: { t: 'В список желаемого', g: ['base'] },
+  toShelf: { t: 'На полку', g: ['dir'] },
+  rate: { t: 'Оценить', g: ['str', 'score', 'tier', 'comment'] },
+  edit: { t: 'Изменить', g: ['dir', 'flavor'] }
+};
+const tg = window.Telegram && window.Telegram.WebApp;
+let data = [], me = { name: '', admin: false }, tab = 'shelf', wsub = 'order', cur = null, tier = '', take = '';
+const filt = { q: '', d: '', t: '' };
+const $ = id => document.getElementById(id);
+
+function rpc(op, d) {
+  return fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ initData: tg ? tg.initData : '', op: op, d: d || {} })
+  }).then(r => r.json()).then(j => { if (!j.ok) throw new Error(j.error); return j.data; });
+}
+
+function el(t, c, x) { const e = document.createElement(t); if (c) e.className = c; if (x !== undefined) e.textContent = x; return e; }
+function fill(sel, items, ph) {
+  sel.textContent = '';
+  const o = el('option', '', ph); o.value = ''; sel.appendChild(o);
+  items.forEach(i => { const x = el('option', '', i); x.value = i; sel.appendChild(x); });
+}
+function seg(id, items, cb) {
+  const box = $(id);
+  items.forEach(v => {
+    const b = el('button', '', v); b.type = 'button';
+    b.onclick = () => { clearSeg(id); b.classList.add('on'); cb(v); };
+    box.appendChild(b);
+  });
+}
+function clearSeg(id) { Array.prototype.forEach.call($(id).children, c => c.classList.remove('on')); }
+function sv(i) { i.nextElementSibling.textContent = i.value; }
+function note(t) { const n = $('toast'); n.textContent = t; n.style.display = 'block'; setTimeout(() => n.style.display = 'none', 3500); }
+function onBrand() {
+  const l = (CATALOG[$('brand').value] || []).slice().sort((a, b) => (b === 'Classic') - (a === 'Classic'));
+  fill($('line'), l, l.length ? 'Выбери линейку' : 'У бренда нет линеек');
+  $('line').disabled = !l.length;
+}
+function choose(text, opts) {
+  const o = $('ov2'), s = $('sheet2'); s.textContent = '';
+  s.appendChild(el('p', '', text));
+  opts.forEach(p => {
+    const b = el('button', 'btn', p[0]); b.style.cssText = 'width:100%;margin:4px 0';
+    b.onclick = () => { o.style.display = 'none'; if (p[1]) p[1](); };
+    s.appendChild(b);
+  });
+  o.style.display = 'flex';
+}
+function load() {
+  draw();
+  rpc('getAll')
+    .then(r => { data = r.items; me = r.me; $('me').textContent = me.name; draw(); })
+    .catch(e => note('Ошибка загрузки: ' + e.message));
+}
+function call(op, d, ok) {
+  rpc(op, d)
+    .then(() => { if (ok) ok(); load(); })
+    .catch(e => { note(e.message); $('save').disabled = false; $('msg').textContent = e.message; });
+}
+
+function card(t, o) {
+  const c = el('div', 'card'), r = el('div', 'row'), l = el('div');
+  l.appendChild(el('div', 'sub', t.line ? t.brand + ' · ' + t.line : t.brand));
+  l.appendChild(el('div', 'ttl', t.name)); r.appendChild(l);
+  if (o.tier && t.tier) r.appendChild(el('div', 'tier t' + t.tier, t.tier));
+  c.appendChild(r);
+  if (o.note) c.appendChild(el('div', 'sub', o.note));
+  if (o.info) {
+    let box = c;
+    if (o.fold) { box = el('details'); box.appendChild(el('summary', '', 'Подробнее')); c.appendChild(box); }
+    box.appendChild(el('div', 'sub', [t.dir, t.flavor].filter(Boolean).join(' · ')));
+    if (t.n) box.appendChild(el('div', 'st', 'Оценка ' + t.score.toFixed(1) + '/10' +
+      (t.str ? ' · Крепость ' + t.str.toFixed(1) + '/10' : '') + ' · оценок: ' + t.n));
+    if (t.com.length) {
+      const d = el('details'); d.appendChild(el('summary', '', 'Комментарии'));
+      t.com.forEach(x => d.appendChild(el('p', 'cm', x)));
+      box.appendChild(d);
+    }
+  }
+  if (o.btns) {
+    const b = el('div', 'btns');
+    o.btns.forEach(p => { const k = el('button', 'btn' + (p[2] ? ' pri' : ''), p[0]); k.onclick = p[1]; b.appendChild(k); });
+    c.appendChild(b);
+  }
+  return c;
+}
+
+function draw() {
+  const nav = $('nav'); nav.textContent = '';
+  [['shelf', 'Полка'], ['exp', 'Эксперименты'], ['wish', 'Желаемое'], ['arch', 'Архив']].forEach(p => {
+    const b = el('button', tab === p[0] ? 'on' : '', p[1]);
+    b.onclick = () => { tab = p[0]; draw(); };
+    nav.appendChild(b);
+  });
+  const m = $('main'); m.textContent = '';
+  ({ shelf: vShelf, exp: vExp, wish: vWish, arch: vArch })[tab](m);
+}
+
+function bigBtn(text, fn) { const b = el('button', 'btn pri', text); b.style.cssText = 'width:100%;margin:10px 0'; b.onclick = fn; return b; }
+
+function vShelf(m) {
+  const q = el('input'); q.placeholder = 'Поиск'; q.value = filt.q;
+  const f = el('div', 'row'), fd = el('select'), ft = el('select'), list = el('div');
+  fill(fd, DIRS, 'Все направления'); fill(ft, TIERS, 'Все тиры'); fd.value = filt.d; ft.value = filt.t;
+  const lst = () => {
+    list.textContent = '';
+    const items = data.filter(t => t.status === 'shelf' && (!filt.d || t.dir === filt.d) && (!filt.t || t.tier === filt.t) &&
+      (t.brand + ' ' + t.line + ' ' + t.name + ' ' + t.flavor).toLowerCase().includes(filt.q.toLowerCase()))
+      .sort((a, b) => b.score - a.score);
+    if (!items.length) { list.appendChild(el('div', 'empty', 'Ничего нет')); return; }
+    items.forEach(t => list.appendChild(card(t, { info: 1, tier: 1, btns: [
+      ['Оценить', () => openForm('rate', t)],
+      ['Изменить', () => openForm('edit', t)],
+      ['Убрать', () => choose('Убрать «' + t.name + '» с полки. Добавить в список желаемого (Заказать)?', [
+        ['Да, в желаемое', () => call('remove', { id: t.id, toWish: 1 })],
+        ['Нет, в архив', () => call('remove', { id: t.id, toWish: 0 })],
+        ['Отмена']])]
+    ] })));
+  };
+  q.oninput = () => { filt.q = q.value; lst(); };
+  fd.onchange = () => { filt.d = fd.value; lst(); };
+  ft.onchange = () => { filt.t = ft.value; lst(); };
+  f.append(fd, ft);
+  m.append(bigBtn('+ Добавить табак', () => openForm('shelf')), q, f, list); lst();
+}
+
+function vExp(m) {
+  m.appendChild(bigBtn('+ Новый эксперимент', () => openForm('exp')));
+  const items = data.filter(t => t.exp);
+  if (!items.length) m.appendChild(el('div', 'empty', 'Пока пусто'));
+  items.forEach(t => m.appendChild(card(t, { info: 1, note: 'Сейчас: ' + LBL[t.status] })));
+}
+
+function vWish(m) {
+  const sw = el('div', 'seg');
+  [['order', 'Заказать'], ['try', 'Попробовать']].forEach(p => {
+    const b = el('button', wsub === p[0] ? 'on' : '', p[1]);
+    b.onclick = () => { wsub = p[0]; draw(); };
+    sw.appendChild(b);
+  });
+  m.append(sw, bigBtn('+ Добавить', () => openForm('wish')));
+  const items = data.filter(t => t.status === wsub);
+  if (!items.length) m.appendChild(el('div', 'empty', 'Пока пусто'));
+  items.forEach(t => m.appendChild(card(t, { btns: [
+    wsub === 'order' ? ['На полку', () => openForm('toShelf', t), 1] : ['Попробовал', () => openForm('exp', t), 1],
+    ['Убрать', () => choose('Убрать «' + t.name + '» из списка?', [['Убрать', () => call('del', { id: t.id })], ['Отмена']])]
+  ] })));
+}
+
+function vArch(m) {
+  const items = data.filter(t => t.status === 'archive');
+  if (!items.length) m.appendChild(el('div', 'empty', 'Архив пуст'));
+  items.forEach(t => m.appendChild(card(t, { info: 1, fold: 1,
+    note: (t.from === 'shelf' ? 'С полки' : 'Из экспериментов') + (t.n ? ' · оценка ' + t.score.toFixed(1) : ''),
+    btns: me.admin ? [['Вернуть в «Заказать»', () => call('restore', { id: t.id })]] : null })));
+}
+
+function openForm(mode, item) {
+  const M = MODES[mode];
+  cur = { mode: mode, id: item && item.id, g: M.g.filter(g => !(item && g === 'base')) };
+  ['base', 'dir', 'flavor', 'str', 'score', 'tier', 'take', 'comment'].forEach(g => $('g_' + g).style.display = cur.g.indexOf(g) >= 0 ? '' : 'none');
+  $('ft').textContent = M.t + (item ? ': ' + item.name : '');
+  ['title', 'comment'].forEach(i => $(i).value = '');
+  $('dir').value = (item && item.dir) || ''; $('flavor').value = (item && item.flavor) || '';
+  ['str', 'score'].forEach(i => { $(i).value = 5; sv($(i)); });
+  tier = ''; take = ''; clearSeg('tierSeg'); clearSeg('takeSeg');
+  $('msg').textContent = ''; $('save').disabled = false;
+  $('ov').style.display = 'flex';
+}
+function closeForm() { $('ov').style.display = 'none'; }
+
+function submit() {
+  const has = g => cur.g.indexOf(g) >= 0, v = i => $(i).value.trim();
+  const d = { id: cur.id, brand: v('brand'), line: v('line'), name: v('title'), dir: v('dir'),
+    flavor: v('flavor'), str: has('str') ? v('str') : '', score: v('score'), tier: tier, take: take, comment: v('comment') };
+  let err = '';
+  if (has('base') && (!d.brand || !d.name)) err = 'Выбери бренд и впиши название';
+  else if (has('base') && (CATALOG[d.brand] || []).length && !d.line) err = 'Выбери линейку';
+  else if (has('dir') && !d.dir) err = 'Выбери направление';
+  else if (has('tier') && !tier) err = 'Выбери тир';
+  else if (has('take') && !take) err = 'Выбери: брать или нет';
+  if (err) { $('msg').textContent = err; return; }
+  if (cur.mode === 'shelf') d.status = 'shelf';
+  if (cur.mode === 'wish') d.status = wsub;
+  $('save').disabled = true; $('msg').textContent = 'Сохраняю...';
+  call({ shelf: 'add', exp: 'experiment', wish: 'add', toShelf: 'toShelf', rate: 'rate', edit: 'edit' }[cur.mode], d, closeForm);
+}
+
+fill($('brand'), Object.keys(CATALOG), 'Выбери бренд');
+fill($('line'), [], 'Сначала выбери бренд');
+fill($('dir'), DIRS, 'Выбери направление');
+seg('tierSeg', TIERS, v => tier = v);
+seg('takeSeg', TAKE, v => take = v);
+if (tg) { tg.ready(); tg.expand(); }
+load();
+</script>
+</body>
+</html>
