@@ -34,6 +34,13 @@ nav button{flex:1 1 auto;padding:10px 6px;font-size:12px;color:var(--tx);backgro
 .empty{text-align:center;color:var(--mut);padding:24px}
 #msg{margin-top:8px;text-align:center;font-size:14px;color:#e5534b;min-height:18px}
 #toast{position:fixed;left:12px;right:12px;bottom:84px;background:#e5534b;color:#fff;padding:10px;border-radius:10px;display:none;z-index:9;text-align:center}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.bc{background:var(--card);border:1px solid var(--br);border-radius:12px;padding:14px 8px;text-align:center;position:relative}
+.lg{width:56px;height:56px;border-radius:50%;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:#fff;overflow:hidden}
+.lg img{width:100%;height:100%;object-fit:contain}
+.bc .n{font-weight:600;font-size:14px;word-break:break-word}
+.bc .c{color:var(--mut);font-size:12px;margin-top:2px}
+.nw{position:absolute;top:8px;right:8px;background:var(--ac);color:#111;border-radius:8px;font-size:10px;font-weight:700;padding:2px 6px}
 </style>
 </head>
 <body>
@@ -124,7 +131,8 @@ const MODES = {
 };
 const tg = window.Telegram && window.Telegram.WebApp;
 let data = [], mixes = [], me = { name: '', admin: false }, tab = 'shelf', wsub = 'order', cur = null, tier = '', take = '';
-const filt = { q: '', d: '', t: '', b: '' };
+let wbrand = '', wq = '';
+const filt = { q: '', d: '', t: '' };
 const $ = id => document.getElementById(id);
 
 function rpc(op, d) {
@@ -361,31 +369,72 @@ function vExp(m) {
   items.forEach(t => m.appendChild(card(t, { info: 1, note: 'Сейчас: ' + LBL[t.status] })));
 }
 
+function logo(b) {
+  const d = el('div', 'lg');
+  let h = 0;
+  for (const ch of b) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  d.style.background = 'hsl(' + h + ',40%,34%)';
+  d.textContent = b.charAt(0).toUpperCase();
+  const img = new Image();
+  img.onload = () => { d.textContent = ''; d.style.background = '#fff'; d.appendChild(img); };
+  img.src = 'logos/' + encodeURIComponent(b.toLowerCase().replace(/\s+/g, '-')) + '.png';
+  return d;
+}
+
 function vWish(m) {
   const sw = el('div', 'seg');
   [['order', 'Заказать'], ['try', 'Попробовать']].forEach(p => {
     const b = el('button', wsub === p[0] ? 'on' : '', p[1]);
-    b.onclick = () => { wsub = p[0]; filt.b = ''; draw(); };
+    b.onclick = () => { wsub = p[0]; wbrand = ''; wq = ''; draw(); };
     sw.appendChild(b);
   });
-  m.append(sw, bigBtn('+ Добавить', () => openForm('wish')));
+  m.appendChild(sw);
   const all = data.filter(t => t.status === wsub);
-  const brands = Array.from(new Set(all.map(t => t.brand))).sort();
-  if (filt.b && brands.indexOf(filt.b) < 0) filt.b = '';
-  const fb = el('select'), list = el('div');
-  fill(fb, brands, 'Все бренды'); fb.value = filt.b;
+  const isNew = t => t.ts && Date.now() - t.ts < 7 * 864e5;
+  const item = t => card(t, { note: isNew(t) ? '🆕 Новое' : '', btns: [
+    wsub === 'order' ? ['На полку', () => openForm('toShelf', t), 1] : ['Попробовал', () => openForm('exp', t), 1],
+    ['Убрать', () => choose('Убрать «' + t.name + '» из списка?', [['Убрать', () => call('del', { id: t.id })], ['Отмена']])]
+  ] });
+
+  if (wbrand) {
+    const items = all.filter(t => t.brand === wbrand);
+    if (!items.length) { wbrand = ''; draw(); return; }
+    const top = el('div', 'btns');
+    top.appendChild(mk('← Все бренды', () => { wbrand = ''; draw(); }));
+    m.append(top, el('h3', '', wbrand), bigBtn('+ Добавить', () => openForm('wish', null, wbrand)));
+    items.forEach(t => m.appendChild(item(t)));
+    return;
+  }
+
+  m.appendChild(bigBtn('+ Добавить', () => openForm('wish')));
+  const q = el('input'), box = el('div');
+  q.placeholder = 'Поиск по всем брендам'; q.value = wq;
   const lst = () => {
-    list.textContent = '';
-    const items = all.filter(t => !filt.b || t.brand === filt.b);
-    if (!items.length) { list.appendChild(el('div', 'empty', 'Пока пусто')); return; }
-    items.forEach(t => list.appendChild(card(t, { btns: [
-      wsub === 'order' ? ['На полку', () => openForm('toShelf', t), 1] : ['Попробовал', () => openForm('exp', t), 1],
-      ['Убрать', () => choose('Убрать «' + t.name + '» из списка?', [['Убрать', () => call('del', { id: t.id })], ['Отмена']])]
-    ] })));
+    box.textContent = '';
+    const s = wq.trim().toLowerCase();
+    if (s) {
+      const r = all.filter(t => (t.brand + ' ' + t.line + ' ' + t.name).toLowerCase().includes(s));
+      if (!r.length) box.appendChild(el('div', 'empty', 'Ничего не найдено'));
+      r.forEach(t => box.appendChild(item(t)));
+      return;
+    }
+    const by = {};
+    all.forEach(t => (by[t.brand] = by[t.brand] || []).push(t));
+    const names = Object.keys(by).sort((a, b) => a.localeCompare(b));
+    if (!names.length) { box.appendChild(el('div', 'empty', 'Пока пусто')); return; }
+    const g = el('div', 'grid');
+    names.forEach(n => {
+      const c = el('div', 'bc');
+      c.onclick = () => { wbrand = n; draw(); };
+      c.append(logo(n), el('div', 'n', n), el('div', 'c', by[n].length + ' поз.'));
+      if (by[n].some(isNew)) c.appendChild(el('div', 'nw', 'NEW'));
+      g.appendChild(c);
+    });
+    box.appendChild(g);
   };
-  fb.onchange = () => { filt.b = fb.value; lst(); };
-  if (brands.length) m.appendChild(fb);
-  m.appendChild(list); lst();
+  q.oninput = () => { wq = q.value; lst(); };
+  m.append(q, box);
+  lst();
 }
 
 function vArch(m) {
@@ -396,7 +445,7 @@ function vArch(m) {
     btns: me.admin ? [['Вернуть в «Заказать»', () => call('restore', { id: t.id })]] : null })));
 }
 
-function openForm(mode, item) {
+function openForm(mode, item, pre) {
   const M = MODES[mode];
   cur = { mode: mode, id: item && item.id, g: M.g.filter(g => !(item && g === 'base')) };
   ['base', 'dir', 'flavor', 'str', 'score', 'tier', 'take', 'comment'].forEach(g => $('g_' + g).style.display = cur.g.indexOf(g) >= 0 ? '' : 'none');
@@ -405,6 +454,7 @@ function openForm(mode, item) {
   $('dir').value = (item && item.dir) || ''; $('flavor').value = (item && item.flavor) || '';
   ['str', 'score'].forEach(i => { $(i).value = 5; sv($(i)); });
   tier = ''; take = ''; clearSeg('tierSeg'); clearSeg('takeSeg');
+  if (pre) { $('brand').value = pre; onBrand(); }
   $('msg').textContent = ''; $('save').disabled = false;
   $('ov').style.display = 'flex';
 }
