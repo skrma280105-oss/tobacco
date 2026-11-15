@@ -9,7 +9,7 @@
 :root{--bg:#16161a;--card:#222228;--tx:#f2f2f2;--mut:#9a9aa5;--ac:#e8a33d;--br:#33333b}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font-family:-apple-system,"Segoe UI",sans-serif}
-#app{max-width:520px;margin:0 auto;padding:calc(12px + var(--tg-safe-area-inset-top,0px) + var(--tg-content-safe-area-inset-top,0px)) 12px 90px}
+#app{max-width:520px;margin:0 auto;padding:calc(12px + var(--tg-safe-area-inset-top,0px) + var(--tg-content-safe-area-inset-top,0px)) 12px 100px}
 .top{display:flex;gap:8px;align-items:center}.top h2{margin:0;flex:1;font-size:20px}.top span{font-size:13px;color:var(--mut)}
 input,select,textarea{width:100%;padding:11px;margin:4px 0;font-size:16px;color:var(--tx);background:var(--card);border:1px solid var(--br);border-radius:10px}
 textarea{min-height:70px}
@@ -26,14 +26,14 @@ details{margin-top:8px;font-size:14px}.cm{margin:6px 0;color:var(--mut)}
 .seg{display:flex;gap:6px}.seg button{flex:1;padding:10px 4px;font-size:15px;color:var(--tx);background:var(--card);border:1px solid var(--br);border-radius:10px}
 .seg button.on{background:var(--ac);color:#111;border-color:var(--ac);font-weight:600}
 .rng{display:flex;align-items:center;gap:12px}.rng input{padding:0}.rng b{min-width:24px;text-align:right;font-size:18px}
-nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#1c1c21;border-top:1px solid var(--br);padding-bottom:max(env(safe-area-inset-bottom),var(--tg-safe-area-inset-bottom,0px))}
-nav button{flex:1;padding:14px 2px;font-size:13px;color:var(--mut);background:none;border:0}nav button.on{color:var(--ac);font-weight:700}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;gap:6px;padding:8px 8px max(8px,env(safe-area-inset-bottom),var(--tg-safe-area-inset-bottom,0px));background:#1c1c21;border-top:1px solid var(--br)}
+nav button{flex:1 1 auto;padding:10px 6px;font-size:12px;color:var(--tx);background:var(--card);border:1px solid var(--br);border-radius:10px;white-space:nowrap}nav button.on{background:var(--ac);color:#111;border-color:var(--ac);font-weight:700}
 .ov{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;z-index:5}
 #ov2{z-index:6}
 .sheet{background:var(--bg);width:100%;max-width:520px;max-height:92vh;overflow:auto;padding:16px;border-radius:16px 16px 0 0}
 .empty{text-align:center;color:var(--mut);padding:24px}
 #msg{margin-top:8px;text-align:center;font-size:14px;color:#e5534b;min-height:18px}
-#toast{position:fixed;left:12px;right:12px;bottom:70px;background:#e5534b;color:#fff;padding:10px;border-radius:10px;display:none;z-index:9;text-align:center}
+#toast{position:fixed;left:12px;right:12px;bottom:84px;background:#e5534b;color:#fff;padding:10px;border-radius:10px;display:none;z-index:9;text-align:center}
 </style>
 </head>
 <body>
@@ -61,6 +61,7 @@ nav button{flex:1;padding:14px 2px;font-size:13px;color:var(--mut);background:no
   <div id="msg"></div>
   <div class="btns"><button class="btn" onclick="closeForm()">Отмена</button><button class="btn pri" id="save" onclick="submit()">Сохранить</button></div>
 </div></div>
+<div class="ov" id="ovm"><div class="sheet" id="sheetm"></div></div>
 <div class="ov" id="ov2"><div class="sheet" id="sheet2"></div></div>
 
 <script>
@@ -109,7 +110,7 @@ const CATALOG = {
   "СЕВЕРНЫЙ": ["Neo", "Professional", "Sorbet", "Classic"],
   "ХУЛИГАН": ["Зомби", "Зомби Hard", "Classic", "Classic Hard", "Поп"]
 };
-const DIRS = ['Фрукты', 'Ягоды', 'Десертка', 'Выпечка', 'Травянистость', 'Алкоголь', 'Безаромка', 'Бустер'];
+const DIRS = ['Фрукты', 'Ягоды', 'Десертка', 'Выпечка', 'Травянистость', 'Алкоголь', 'Безаромка', 'Бустер', 'Парфюмка', 'Сигарка', 'Гастрономия'];
 const TIERS = ['A', 'B', 'C', 'D', 'E'];
 const TAKE = ['Да', 'Нет'];
 const LBL = { shelf: 'на полке', order: 'в «Заказать»', try: 'в «Попробовать»', archive: 'в архиве' };
@@ -122,7 +123,7 @@ const MODES = {
   edit: { t: 'Изменить', g: ['dir', 'flavor'] }
 };
 const tg = window.Telegram && window.Telegram.WebApp;
-let data = [], me = { name: '', admin: false }, tab = 'shelf', wsub = 'order', cur = null, tier = '', take = '';
+let data = [], mixes = [], me = { name: '', admin: false }, tab = 'shelf', wsub = 'order', cur = null, tier = '', take = '';
 const filt = { q: '', d: '', t: '' };
 const $ = id => document.getElementById(id);
 
@@ -135,6 +136,7 @@ function rpc(op, d) {
 }
 
 function el(t, c, x) { const e = document.createElement(t); if (c) e.className = c; if (x !== undefined) e.textContent = x; return e; }
+function mk(text, fn, pri) { const b = el('button', 'btn' + (pri ? ' pri' : ''), text); b.onclick = fn; return b; }
 function fill(sel, items, ph) {
   sel.textContent = '';
   const o = el('option', '', ph); o.value = ''; sel.appendChild(o);
@@ -169,7 +171,7 @@ function choose(text, opts) {
 function load() {
   draw();
   rpc('getAll')
-    .then(r => { data = r.items; me = r.me; $('me').textContent = me.name; draw(); })
+    .then(r => { data = r.items; mixes = r.mixes || []; me = r.me; $('me').textContent = me.name; draw(); })
     .catch(e => note('Ошибка загрузки: ' + e.message));
 }
 function call(op, d, ok) {
@@ -207,13 +209,13 @@ function card(t, o) {
 
 function draw() {
   const nav = $('nav'); nav.textContent = '';
-  [['shelf', 'Полка'], ['exp', 'Эксперименты'], ['wish', 'Желаемое'], ['arch', 'Архив']].forEach(p => {
+  [['shelf', 'Полка'], ['mix', 'Миксы'], ['exp', 'Эксперименты'], ['wish', 'Желаемое'], ['arch', 'Архив']].forEach(p => {
     const b = el('button', tab === p[0] ? 'on' : '', p[1]);
     b.onclick = () => { tab = p[0]; draw(); };
     nav.appendChild(b);
   });
   const m = $('main'); m.textContent = '';
-  ({ shelf: vShelf, exp: vExp, wish: vWish, arch: vArch })[tab](m);
+  ({ shelf: vShelf, mix: vMix, exp: vExp, wish: vWish, arch: vArch })[tab](m);
 }
 
 function bigBtn(text, fn) { const b = el('button', 'btn pri', text); b.style.cssText = 'width:100%;margin:10px 0'; b.onclick = fn; return b; }
@@ -242,6 +244,114 @@ function vShelf(m) {
   ft.onchange = () => { filt.t = ft.value; lst(); };
   f.append(fd, ft);
   m.append(bigBtn('+ Добавить табак', () => openForm('shelf')), q, f, list); lst();
+}
+
+function vMix(m) {
+  m.appendChild(bigBtn('+ Создать микс', () => mixForm()));
+  if (!mixes.length) m.appendChild(el('div', 'empty', 'Миксов пока нет'));
+  mixes.forEach(x => {
+    const c = el('div', 'card');
+    c.appendChild(el('div', 'ttl', x.name));
+    c.appendChild(el('div', 'sub', 'Автор: ' + x.author));
+    c.appendChild(el('div', 'st', x.n ? 'Рейтинг ' + x.score.toFixed(1) + '/10 · оценок: ' + x.n : 'Пока без оценок'));
+    const b = el('div', 'btns'); b.appendChild(mk('Открыть', () => mixView(x.id)));
+    c.appendChild(b); m.appendChild(c);
+  });
+}
+
+function sheetm() { const s = $('sheetm'); s.textContent = ''; $('ovm').style.display = 'flex'; return s; }
+function closeM() { $('ovm').style.display = 'none'; }
+
+function mixView(id) {
+  const x = mixes.find(m => m.id === id);
+  if (!x) return;
+  const s = sheetm();
+  s.appendChild(el('h3', '', x.name));
+  s.appendChild(el('div', 'sub', 'Автор: ' + x.author));
+  x.parts.forEach(p => {
+    const c = el('div', 'card');
+    c.appendChild(el('div', 'ttl', p.p + '% · ' + p.n));
+    c.appendChild(el('div', 'sub', (p.line ? p.brand + ' · ' + p.line : p.brand) + (p.on ? '' : ' · нет на полке')));
+    s.appendChild(c);
+  });
+  s.appendChild(el('div', 'st', x.n ? 'Рейтинг ' + x.score.toFixed(1) + '/10 · оценок: ' + x.n : 'Пока без оценок'));
+  if (x.com.length) {
+    const d = el('details'); d.appendChild(el('summary', '', 'Комментарии'));
+    x.com.forEach(c => d.appendChild(el('p', 'cm', c)));
+    s.appendChild(d);
+  }
+  s.appendChild(el('label', '', 'Моя оценка'));
+  const rg = el('div', 'rng'), inp = el('input'), val = el('b', '', String(x.my || 5));
+  inp.type = 'range'; inp.min = 1; inp.max = 10; inp.value = x.my || 5;
+  inp.oninput = () => val.textContent = inp.value;
+  rg.append(inp, val); s.appendChild(rg);
+  const cm = el('textarea'); cm.placeholder = 'Комментарий'; cm.value = x.myc || ''; s.appendChild(cm);
+  const b1 = el('div', 'btns');
+  b1.append(mk('Закрыть', closeM), mk('Сохранить оценку', () => call('mixRate', { id: x.id, score: inp.value, comment: cm.value.trim() }, closeM), 1));
+  s.appendChild(b1);
+  if (x.mine || me.admin) {
+    const b2 = el('div', 'btns');
+    if (x.mine) b2.appendChild(mk('Изменить микс', () => mixForm(x)));
+    b2.appendChild(mk('Удалить микс', () => choose('Удалить микс «' + x.name + '»?', [
+      ['Удалить', () => call('mixDel', { id: x.id }, closeM)], ['Отмена']])));
+    s.appendChild(b2);
+  }
+}
+
+function mixForm(x) {
+  const shelf = data.filter(t => t.status === 'shelf').sort((a, b) => (a.brand + a.name).localeCompare(b.brand + b.name));
+  if (shelf.length < 2) { note('Для микса нужно минимум два табака на полке'); return; }
+  const s = sheetm();
+  s.appendChild(el('h3', '', x ? 'Изменить микс' : 'Новый микс'));
+  const rows = el('div'), sum = el('div', 'st'), err = el('div');
+  err.style.cssText = 'color:#e5534b;text-align:center;font-size:14px;min-height:18px;margin-top:8px';
+  const upd = () => {
+    let t = 0;
+    Array.prototype.forEach.call(rows.querySelectorAll('input'), i => t += Number(i.value) || 0);
+    sum.textContent = 'Сумма: ' + t + '% · осталось ' + (100 - t) + '%';
+    sum.style.color = t === 100 ? '#3fb950' : '#e8a33d';
+  };
+  const addRow = (tid, p) => {
+    const r = el('div', 'row'), sel = el('select'), inp = el('input'), rm = el('button', 'btn', '✕');
+    r.style.alignItems = 'center';
+    sel.style.cssText = 'flex:1;min-width:0';
+    const opts = shelf.map(t => [t.id, t.brand + (t.line ? ' ' + t.line : '') + ' — ' + t.name]);
+    if (tid && !shelf.some(t => t.id === tid)) {
+      const o = x.parts.find(q => q.t === tid);
+      opts.push([tid, (o ? o.n : '?') + ' (нет на полке)']);
+    }
+    sel.appendChild(Object.assign(el('option', '', 'Выбери табак'), { value: '' }));
+    opts.forEach(o => sel.appendChild(Object.assign(el('option', '', o[1]), { value: o[0] })));
+    sel.value = tid || '';
+    inp.type = 'number'; inp.min = 1; inp.max = 100; inp.placeholder = '%'; inp.value = p || '';
+    inp.style.width = '76px'; inp.oninput = upd;
+    rm.onclick = () => { r.remove(); upd(); };
+    r.append(sel, inp, rm); rows.appendChild(r); upd();
+  };
+  (x ? x.parts : [{}, {}]).forEach(p => addRow(p.t, p.p));
+  const eq = () => {
+    const ins = rows.querySelectorAll('input'), n = ins.length;
+    Array.prototype.forEach.call(ins, (i, k) => i.value = Math.floor(100 / n) + (k < 100 % n ? 1 : 0));
+    upd();
+  };
+  const save = () => {
+    const parts = Array.prototype.map.call(rows.children, r => ({
+      t: r.querySelector('select').value, p: Number(r.querySelector('input').value) }));
+    const ids = parts.map(p => p.t);
+    let e = '', t = 0;
+    parts.forEach(p => t += p.p);
+    if (parts.length < 2) e = 'Нужно минимум два вкуса';
+    else if (ids.some(i => !i)) e = 'Выбери табак в каждой строке';
+    else if (new Set(ids).size !== ids.length) e = 'Один табак выбран дважды';
+    else if (parts.some(p => !(p.p >= 1 && p.p <= 100) || p.p % 1 !== 0)) e = 'Проценты: целые числа от 1 до 100';
+    else if (t !== 100) e = 'Сумма должна быть ровно 100% (сейчас ' + t + '%)';
+    if (e) { err.textContent = e; return; }
+    call('mixSave', { id: x && x.id, parts: parts }, closeM);
+  };
+  const tools = el('div', 'btns'), fin = el('div', 'btns');
+  tools.append(mk('+ Вкус', () => addRow()), mk('Поровну', eq));
+  fin.append(mk('Отмена', closeM), mk('Сохранить', save, 1));
+  s.append(rows, sum, tools, err, fin);
 }
 
 function vExp(m) {
@@ -318,7 +428,6 @@ if (tg) {
   try { tg.setHeaderColor('#16161a'); tg.setBackgroundColor('#16161a'); } catch (e) {}
 }
 load();
-  
 </script>
 </body>
 </html>
