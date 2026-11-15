@@ -124,7 +124,7 @@ const MODES = {
 };
 const tg = window.Telegram && window.Telegram.WebApp;
 let data = [], mixes = [], me = { name: '', admin: false }, tab = 'shelf', wsub = 'order', cur = null, tier = '', take = '';
-const filt = { q: '', d: '', t: '' };
+const filt = { q: '', d: '', t: '', b: '' };
 const $ = id => document.getElementById(id);
 
 function rpc(op, d) {
@@ -365,16 +365,27 @@ function vWish(m) {
   const sw = el('div', 'seg');
   [['order', 'Заказать'], ['try', 'Попробовать']].forEach(p => {
     const b = el('button', wsub === p[0] ? 'on' : '', p[1]);
-    b.onclick = () => { wsub = p[0]; draw(); };
+    b.onclick = () => { wsub = p[0]; filt.b = ''; draw(); };
     sw.appendChild(b);
   });
   m.append(sw, bigBtn('+ Добавить', () => openForm('wish')));
-  const items = data.filter(t => t.status === wsub);
-  if (!items.length) m.appendChild(el('div', 'empty', 'Пока пусто'));
-  items.forEach(t => m.appendChild(card(t, { btns: [
-    wsub === 'order' ? ['На полку', () => openForm('toShelf', t), 1] : ['Попробовал', () => openForm('exp', t), 1],
-    ['Убрать', () => choose('Убрать «' + t.name + '» из списка?', [['Убрать', () => call('del', { id: t.id })], ['Отмена']])]
-  ] })));
+  const all = data.filter(t => t.status === wsub);
+  const brands = Array.from(new Set(all.map(t => t.brand))).sort();
+  if (filt.b && brands.indexOf(filt.b) < 0) filt.b = '';
+  const fb = el('select'), list = el('div');
+  fill(fb, brands, 'Все бренды'); fb.value = filt.b;
+  const lst = () => {
+    list.textContent = '';
+    const items = all.filter(t => !filt.b || t.brand === filt.b);
+    if (!items.length) { list.appendChild(el('div', 'empty', 'Пока пусто')); return; }
+    items.forEach(t => list.appendChild(card(t, { btns: [
+      wsub === 'order' ? ['На полку', () => openForm('toShelf', t), 1] : ['Попробовал', () => openForm('exp', t), 1],
+      ['Убрать', () => choose('Убрать «' + t.name + '» из списка?', [['Убрать', () => call('del', { id: t.id })], ['Отмена']])]
+    ] })));
+  };
+  fb.onchange = () => { filt.b = fb.value; lst(); };
+  if (brands.length) m.appendChild(fb);
+  m.appendChild(list); lst();
 }
 
 function vArch(m) {
