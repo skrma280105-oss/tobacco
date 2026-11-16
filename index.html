@@ -126,7 +126,7 @@ const MODES = {
   exp: { t: 'Эксперимент', g: ['base', 'dir', 'flavor', 'score', 'take', 'comment'] },
   wish: { t: 'В список желаемого', g: ['base'] },
   toShelf: { t: 'На полку', g: ['dir'] },
-  rate: { t: 'Оценить', g: ['str', 'score', 'tier', 'comment'] },
+  rate: { t: 'Оценить', g: ['score', 'tier', 'comment'] },
   editFull: { t: 'Изменить', g: ['base', 'dir', 'flavor'], keep: 1 },
   editBase: { t: 'Изменить', g: ['base'], keep: 1 }
 };
@@ -224,8 +224,7 @@ function card(t, o) {
     let box = c;
     if (o.fold) { box = el('details'); box.appendChild(el('summary', '', 'Подробнее')); c.appendChild(box); }
     box.appendChild(el('div', 'sub', [t.dir, t.flavor].filter(Boolean).join(' · ')));
-    if (t.n) box.appendChild(el('div', 'st', 'Оценка ' + t.score.toFixed(1) + '/10' +
-      (t.str ? ' · Крепость ' + t.str.toFixed(1) + '/10' : '') + ' · оценок: ' + t.n));
+    if (t.n) box.appendChild(el('div', 'st', 'Оценка ' + t.score.toFixed(1) + '/10 · оценок: ' + t.n));
     if (t.com.length) {
       const d = el('details'); d.appendChild(el('summary', '', 'Комментарии'));
       t.com.forEach(x => d.appendChild(el('p', 'cm', x)));
