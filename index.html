@@ -127,7 +127,8 @@ const MODES = {
   wish: { t: 'В список желаемого', g: ['base'] },
   toShelf: { t: 'На полку', g: ['dir'] },
   rate: { t: 'Оценить', g: ['str', 'score', 'tier', 'comment'] },
-  edit: { t: 'Изменить', g: ['dir', 'flavor'] }
+  editFull: { t: 'Изменить', g: ['base', 'dir', 'flavor'], keep: 1 },
+  editBase: { t: 'Изменить', g: ['base'], keep: 1 }
 };
 const tg = window.Telegram && window.Telegram.WebApp;
 let data = [], mixes = [], me = { name: '', admin: false }, tab = 'shelf', wsub = 'order', cur = null, tier = '', take = '';
@@ -231,7 +232,7 @@ function card(t, o) {
       box.appendChild(d);
     }
   }
-  if (o.btns) {
+  if (o.btns && o.btns.length) {
     const b = el('div', 'btns');
     o.btns.forEach(p => { const k = el('button', 'btn' + (p[2] ? ' pri' : ''), p[0]); k.onclick = p[1]; b.appendChild(k); });
     c.appendChild(b);
@@ -298,7 +299,7 @@ function vShelf(m) {
   const all = data.filter(t => t.status === 'shelf');
   const item = t => card(t, { info: 1, tier: 1, note: isNewT(t) ? '🆕 Новое' : '', btns: [
     ['Оценить', () => openForm('rate', t)],
-    ['Изменить', () => openForm('edit', t)],
+    ['Изменить', () => openForm('editFull', t)],
     ['Убрать', () => choose('Убрать «' + t.name + '» с полки. Добавить в список желаемого (Заказать)?', [
       ['Да, в желаемое', () => call('remove', { id: t.id, toWish: 1 })],
       ['Нет, в архив', () => call('remove', { id: t.id, toWish: 0 })],
@@ -349,7 +350,9 @@ function vMix(m) {
     c.appendChild(el('div', 'ttl', x.name));
     c.appendChild(el('div', 'sub', 'Автор: ' + x.author));
     c.appendChild(el('div', 'st', x.n ? 'Рейтинг ' + x.score.toFixed(1) + '/10 · оценок: ' + x.n : 'Пока без оценок'));
-    const b = el('div', 'btns'); b.appendChild(mk('Открыть', () => mixView(x.id)));
+    const b = el('div', 'btns');
+    b.appendChild(mk('Открыть', () => mixView(x.id)));
+    if (x.mine) b.appendChild(mk('Изменить', () => mixForm(x)));
     c.appendChild(b); m.appendChild(c);
   });
 }
@@ -493,7 +496,8 @@ function vExp(m) {
   m.appendChild(bigBtn('+ Новый эксперимент', () => openForm('exp')));
   const items = data.filter(t => t.exp);
   if (!items.length) m.appendChild(el('div', 'empty', 'Пока пусто'));
-  items.forEach(t => m.appendChild(card(t, { info: 1, note: 'Сейчас: ' + LBL[t.status] })));
+  items.forEach(t => m.appendChild(card(t, { info: 1, note: 'Сейчас: ' + LBL[t.status],
+    btns: [['Изменить', () => openForm('editFull', t)]] })));
 }
 
 function vWish(m) {
@@ -507,6 +511,7 @@ function vWish(m) {
   const all = data.filter(t => t.status === wsub);
   const item = t => card(t, { note: isNewT(t) ? '🆕 Новое' : '', btns: [
     wsub === 'order' ? ['На полку', () => openForm('toShelf', t), 1] : ['Попробовал', () => openForm('exp', t), 1],
+    ['Изменить', () => openForm('editBase', t)],
     ['Убрать', () => choose('Убрать «' + t.name + '» из списка?', [['Убрать', () => call('del', { id: t.id })], ['Отмена']])]
   ] });
 
@@ -543,18 +548,29 @@ function vArch(m) {
   if (!items.length) m.appendChild(el('div', 'empty', 'Архив пуст'));
   items.forEach(t => m.appendChild(card(t, { info: 1, fold: 1,
     note: (t.from === 'shelf' ? 'С полки' : 'Из экспериментов') + (t.n ? ' · оценка ' + t.score.toFixed(1) : ''),
-    btns: me.admin ? [['Вернуть в «Заказать»', () => call('restore', { id: t.id })]] : null })));
+    btns: [['Изменить', () => openForm('editFull', t)]]
+      .concat(me.admin ? [['Вернуть в «Заказать»', () => call('restore', { id: t.id })]] : []) })));
 }
 
 function openForm(mode, item, pre) {
   const M = MODES[mode];
-  cur = { mode: mode, id: item && item.id, g: M.g.filter(g => !(item && g === 'base')) };
+  cur = { mode: mode, id: item && item.id, g: M.g.filter(g => M.keep || !(item && g === 'base')) };
   ['base', 'dir', 'flavor', 'str', 'score', 'tier', 'take', 'comment'].forEach(g => $('g_' + g).style.display = cur.g.indexOf(g) >= 0 ? '' : 'none');
   $('ft').textContent = M.t + (item ? ': ' + item.name : '');
   ['title', 'comment'].forEach(i => $(i).value = '');
   $('dir').value = (item && item.dir) || ''; $('flavor').value = (item && item.flavor) || '';
   ['str', 'score'].forEach(i => { $(i).value = 5; sv($(i)); });
   tier = ''; take = ''; clearSeg('tierSeg'); clearSeg('takeSeg');
+  if (M.keep && item) {
+    if (!CAT[item.brand]) $('brand').appendChild(Object.assign(el('option', '', item.brand), { value: item.brand }));
+    $('brand').value = item.brand; onBrand();
+    if (item.line && !Array.prototype.some.call($('line').options, o => o.value === item.line)) {
+      $('line').appendChild(Object.assign(el('option', '', item.line), { value: item.line }));
+      $('line').disabled = false;
+    }
+    $('line').value = item.line || '';
+    $('title').value = item.name;
+  }
   if (pre) { $('brand').value = pre; onBrand(); }
   $('msg').textContent = ''; $('save').disabled = false;
   $('ov').style.display = 'flex';
@@ -575,7 +591,8 @@ function submit() {
   if (cur.mode === 'shelf') d.status = 'shelf';
   if (cur.mode === 'wish') d.status = wsub;
   $('save').disabled = true; $('msg').textContent = 'Сохраняю...';
-  call({ shelf: 'add', exp: 'experiment', wish: 'add', toShelf: 'toShelf', rate: 'rate', edit: 'edit' }[cur.mode], d, closeForm);
+  call({ shelf: 'add', exp: 'experiment', wish: 'add', toShelf: 'toShelf', rate: 'rate',
+    editFull: 'editFull', editBase: 'editFull' }[cur.mode], d, closeForm);
 }
 
 buildCat([]);
