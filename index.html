@@ -45,7 +45,7 @@ nav button{flex:1 1 auto;padding:10px 6px;font-size:12px;color:var(--tx);backgro
 </head>
 <body>
 <div id="app">
-  <div class="top"><h2>Табачная полка</h2><span id="me"></span></div>
+  <div class="top"><h2>Табачная полка</h2><span id="me"></span><button class="btn" id="adm" style="display:none;padding:6px 10px;font-size:13px" onclick="catForm()">⚙ Бренды</button></div>
   <div id="main"></div>
 </div>
 <nav id="nav"></nav>
@@ -131,7 +131,8 @@ const MODES = {
 };
 const tg = window.Telegram && window.Telegram.WebApp;
 let data = [], mixes = [], me = { name: '', admin: false }, tab = 'shelf', wsub = 'order', cur = null, tier = '', take = '';
-let wbrand = '', wq = '';
+let wbrand = '', wq = '', sbrand = '', CAT = {}, EXTRA = [], flat = {};
+try { flat = JSON.parse(localStorage.getItem('flat') || '{}'); } catch (e) {}
 const filt = { q: '', d: '', t: '' };
 const $ = id => document.getElementById(id);
 
@@ -161,8 +162,25 @@ function seg(id, items, cb) {
 function clearSeg(id) { Array.prototype.forEach.call($(id).children, c => c.classList.remove('on')); }
 function sv(i) { i.nextElementSibling.textContent = i.value; }
 function note(t) { const n = $('toast'); n.textContent = t; n.style.display = 'block'; setTimeout(() => n.style.display = 'none', 3500); }
+
+function buildCat(extra) {
+  EXTRA = extra || [];
+  CAT = {};
+  Object.keys(CATALOG).forEach(b => CAT[b] = CATALOG[b].slice());
+  EXTRA.forEach(x => {
+    const key = Object.keys(CAT).find(k => k.toLowerCase() === x.brand.toLowerCase()) || x.brand;
+    if (!CAT[key]) CAT[key] = [];
+    if (x.line && CAT[key].indexOf(x.line) < 0) CAT[key].push(x.line);
+  });
+}
+function brandList() { return Object.keys(CAT).sort((a, b) => a.localeCompare(b)); }
+function refillBrands() {
+  const sel = $('brand'), v = sel.value, lv = $('line').value;
+  fill(sel, brandList(), 'Выбери бренд');
+  if (v && CAT[v]) { sel.value = v; onBrand(); $('line').value = lv; }
+}
 function onBrand() {
-  const l = (CATALOG[$('brand').value] || []).slice().sort((a, b) => (b === 'Classic') - (a === 'Classic'));
+  const l = (CAT[$('brand').value] || []).slice().sort((a, b) => (b === 'Classic') - (a === 'Classic'));
   fill($('line'), l, l.length ? 'Выбери линейку' : 'У бренда нет линеек');
   $('line').disabled = !l.length;
 }
@@ -176,11 +194,17 @@ function choose(text, opts) {
   });
   o.style.display = 'flex';
 }
+function applyAll(r) {
+  data = r.items; mixes = r.mixes || []; me = r.me;
+  buildCat(r.catalog);
+  $('me').textContent = me.name;
+  $('adm').style.display = me.admin ? '' : 'none';
+  refillBrands();
+  draw();
+}
 function load() {
   draw();
-  rpc('getAll')
-    .then(r => { data = r.items; mixes = r.mixes || []; me = r.me; $('me').textContent = me.name; draw(); })
-    .catch(e => note('Ошибка загрузки: ' + e.message));
+  rpc('getAll').then(applyAll).catch(e => note('Ошибка загрузки: ' + e.message));
 }
 function call(op, d, ok) {
   rpc(op, d)
@@ -219,7 +243,7 @@ function draw() {
   const nav = $('nav'); nav.textContent = '';
   [['shelf', 'Полка'], ['mix', 'Миксы'], ['exp', 'Эксперименты'], ['wish', 'Желаемое'], ['arch', 'Архив']].forEach(p => {
     const b = el('button', tab === p[0] ? 'on' : '', p[1]);
-    b.onclick = () => { tab = p[0]; draw(); };
+    b.onclick = () => { if (tab === p[0]) { sbrand = ''; wbrand = ''; } tab = p[0]; draw(); };
     nav.appendChild(b);
   });
   const m = $('main'); m.textContent = '';
@@ -228,30 +252,93 @@ function draw() {
 
 function bigBtn(text, fn) { const b = el('button', 'btn pri', text); b.style.cssText = 'width:100%;margin:10px 0'; b.onclick = fn; return b; }
 
+function addBar(text, fn, key) {
+  const r = el('div', 'row'), a = bigBtn(text, fn);
+  a.style.cssText = 'flex:1;margin:10px 0';
+  r.style.alignItems = 'center';
+  const f = mk(flat[key] ? '▦ Бренды' : '☰ Карточки', () => {
+    flat[key] = !flat[key]; sbrand = ''; wbrand = '';
+    try { localStorage.setItem('flat', JSON.stringify(flat)); } catch (e) {}
+    draw();
+  });
+  f.style.cssText = 'white-space:nowrap;margin:10px 0';
+  r.append(a, f);
+  return r;
+}
+
+const isNewT = t => t.ts && Date.now() - t.ts < 7 * 864e5;
+
+function logo(b) {
+  const d = el('div', 'lg');
+  let h = 0;
+  for (const ch of b) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  d.style.background = 'hsl(' + h + ',40%,34%)';
+  d.textContent = b.charAt(0).toUpperCase();
+  const img = new Image();
+  img.onload = () => { d.textContent = ''; d.style.background = '#fff'; d.appendChild(img); };
+  img.src = 'logos/' + encodeURIComponent(b.toLowerCase().replace(/\s+/g, '-')) + '.png';
+  return d;
+}
+
+function brandGrid(items, pick) {
+  const by = {};
+  items.forEach(t => (by[t.brand] = by[t.brand] || []).push(t));
+  const g = el('div', 'grid');
+  Object.keys(by).sort((a, b) => a.localeCompare(b)).forEach(n => {
+    const c = el('div', 'bc');
+    c.onclick = () => pick(n);
+    c.append(logo(n), el('div', 'n', n), el('div', 'c', by[n].length + ' поз.'));
+    if (by[n].some(isNewT)) c.appendChild(el('div', 'nw', 'NEW'));
+    g.appendChild(c);
+  });
+  return g;
+}
+
 function vShelf(m) {
-  const q = el('input'); q.placeholder = 'Поиск'; q.value = filt.q;
-  const f = el('div', 'row'), fd = el('select'), ft = el('select'), list = el('div');
+  const all = data.filter(t => t.status === 'shelf');
+  const item = t => card(t, { info: 1, tier: 1, note: isNewT(t) ? '🆕 Новое' : '', btns: [
+    ['Оценить', () => openForm('rate', t)],
+    ['Изменить', () => openForm('edit', t)],
+    ['Убрать', () => choose('Убрать «' + t.name + '» с полки. Добавить в список желаемого (Заказать)?', [
+      ['Да, в желаемое', () => call('remove', { id: t.id, toWish: 1 })],
+      ['Нет, в архив', () => call('remove', { id: t.id, toWish: 0 })],
+      ['Отмена']])]
+  ] });
+
+  if (sbrand) {
+    const items = all.filter(t => t.brand === sbrand).sort((a, b) => b.score - a.score);
+    if (!items.length) { sbrand = ''; draw(); return; }
+    const top = el('div', 'btns');
+    top.appendChild(mk('← Все бренды', () => { sbrand = ''; draw(); }));
+    m.append(top, el('h3', '', sbrand), bigBtn('+ Добавить табак', () => openForm('shelf', null, sbrand)));
+    items.forEach(t => m.appendChild(item(t)));
+    return;
+  }
+
+  m.appendChild(addBar('+ Добавить табак', () => openForm('shelf'), 'shelf'));
+  const q = el('input'), f = el('div', 'row'), fd = el('select'), ft = el('select'), box = el('div');
+  q.placeholder = 'Поиск по всем брендам'; q.value = filt.q;
   fill(fd, DIRS, 'Все направления'); fill(ft, TIERS, 'Все тиры'); fd.value = filt.d; ft.value = filt.t;
   const lst = () => {
-    list.textContent = '';
-    const items = data.filter(t => t.status === 'shelf' && (!filt.d || t.dir === filt.d) && (!filt.t || t.tier === filt.t) &&
-      (t.brand + ' ' + t.line + ' ' + t.name + ' ' + t.flavor).toLowerCase().includes(filt.q.toLowerCase()))
+    box.textContent = '';
+    const s = filt.q.trim().toLowerCase();
+    if (!flat.shelf && !s && !filt.d && !filt.t) {
+      if (!all.length) { box.appendChild(el('div', 'empty', 'На полке пусто')); return; }
+      box.appendChild(brandGrid(all, n => { sbrand = n; draw(); }));
+      return;
+    }
+    const r = all.filter(t => (!filt.d || t.dir === filt.d) && (!filt.t || t.tier === filt.t) &&
+      (t.brand + ' ' + t.line + ' ' + t.name + ' ' + t.flavor).toLowerCase().includes(s))
       .sort((a, b) => b.score - a.score);
-    if (!items.length) { list.appendChild(el('div', 'empty', 'Ничего нет')); return; }
-    items.forEach(t => list.appendChild(card(t, { info: 1, tier: 1, btns: [
-      ['Оценить', () => openForm('rate', t)],
-      ['Изменить', () => openForm('edit', t)],
-      ['Убрать', () => choose('Убрать «' + t.name + '» с полки. Добавить в список желаемого (Заказать)?', [
-        ['Да, в желаемое', () => call('remove', { id: t.id, toWish: 1 })],
-        ['Нет, в архив', () => call('remove', { id: t.id, toWish: 0 })],
-        ['Отмена']])]
-    ] })));
+    if (!r.length) { box.appendChild(el('div', 'empty', 'Ничего не найдено')); return; }
+    r.forEach(t => box.appendChild(item(t)));
   };
   q.oninput = () => { filt.q = q.value; lst(); };
   fd.onchange = () => { filt.d = fd.value; lst(); };
   ft.onchange = () => { filt.t = ft.value; lst(); };
   f.append(fd, ft);
-  m.append(bigBtn('+ Добавить табак', () => openForm('shelf')), q, f, list); lst();
+  m.append(q, f, box);
+  lst();
 }
 
 function vMix(m) {
@@ -362,23 +449,51 @@ function mixForm(x) {
   s.append(rows, sum, tools, err, fin);
 }
 
+function catForm() {
+  const s = sheetm();
+  s.appendChild(el('h3', '', 'Бренды и линейки'));
+  const sel = el('select'), nb = el('input'), ln = el('input'), err = el('div');
+  err.style.cssText = 'color:#e5534b;text-align:center;font-size:14px;min-height:18px;margin-top:8px';
+  fill(sel, brandList(), '➕ Новый бренд');
+  nb.placeholder = 'Название нового бренда';
+  ln.placeholder = 'Линейка (для нового бренда необязательно)';
+  sel.onchange = () => { nb.style.display = sel.value ? 'none' : ''; };
+  s.append(el('label', '', 'Бренд'), sel, nb, el('label', '', 'Линейка'), ln, err);
+  const refresh = () => rpc('getAll').then(r => { applyAll(r); catForm(); });
+  const add = () => {
+    const brand = (sel.value || nb.value).trim(), line = ln.value.trim();
+    const have = Object.keys(CAT).find(k => k.toLowerCase() === brand.toLowerCase());
+    let e = '';
+    if (!brand) e = 'Впиши название бренда';
+    else if (!sel.value && have) e = 'Такой бренд уже есть, выбери его в списке';
+    else if (sel.value && !line) e = 'Впиши название линейки';
+    else if (have && line && CAT[have].some(x => x.toLowerCase() === line.toLowerCase())) e = 'Такая линейка уже есть';
+    if (e) { err.textContent = e; return; }
+    err.textContent = 'Сохраняю...';
+    rpc('catAdd', { brand: have || brand, line: line }).then(refresh).catch(x => err.textContent = x.message);
+  };
+  const b1 = el('div', 'btns');
+  b1.append(mk('Закрыть', closeM), mk('Добавить', add, 1));
+  s.appendChild(b1);
+  if (EXTRA.length) {
+    s.appendChild(el('label', '', 'Добавлено в приложении'));
+    EXTRA.forEach(x => {
+      const name = x.line ? x.brand + ' · ' + x.line : x.brand;
+      const r = el('div', 'row');
+      r.style.cssText = 'align-items:center;margin:6px 0';
+      r.append(el('div', '', name), mk('✕', () => choose('Удалить «' + name + '» из списка?', [
+        ['Удалить', () => rpc('catDel', { brand: x.brand, line: x.line }).then(refresh).catch(e => note(e.message))],
+        ['Отмена']])));
+      s.appendChild(r);
+    });
+  }
+}
+
 function vExp(m) {
   m.appendChild(bigBtn('+ Новый эксперимент', () => openForm('exp')));
   const items = data.filter(t => t.exp);
   if (!items.length) m.appendChild(el('div', 'empty', 'Пока пусто'));
   items.forEach(t => m.appendChild(card(t, { info: 1, note: 'Сейчас: ' + LBL[t.status] })));
-}
-
-function logo(b) {
-  const d = el('div', 'lg');
-  let h = 0;
-  for (const ch of b) h = (h * 31 + ch.charCodeAt(0)) % 360;
-  d.style.background = 'hsl(' + h + ',40%,34%)';
-  d.textContent = b.charAt(0).toUpperCase();
-  const img = new Image();
-  img.onload = () => { d.textContent = ''; d.style.background = '#fff'; d.appendChild(img); };
-  img.src = 'logos/' + encodeURIComponent(b.toLowerCase().replace(/\s+/g, '-')) + '.png';
-  return d;
 }
 
 function vWish(m) {
@@ -390,8 +505,7 @@ function vWish(m) {
   });
   m.appendChild(sw);
   const all = data.filter(t => t.status === wsub);
-  const isNew = t => t.ts && Date.now() - t.ts < 7 * 864e5;
-  const item = t => card(t, { note: isNew(t) ? '🆕 Новое' : '', btns: [
+  const item = t => card(t, { note: isNewT(t) ? '🆕 Новое' : '', btns: [
     wsub === 'order' ? ['На полку', () => openForm('toShelf', t), 1] : ['Попробовал', () => openForm('exp', t), 1],
     ['Убрать', () => choose('Убрать «' + t.name + '» из списка?', [['Убрать', () => call('del', { id: t.id })], ['Отмена']])]
   ] });
@@ -406,31 +520,18 @@ function vWish(m) {
     return;
   }
 
-  m.appendChild(bigBtn('+ Добавить', () => openForm('wish')));
+  m.appendChild(addBar('+ Добавить', () => openForm('wish'), 'wish'));
   const q = el('input'), box = el('div');
   q.placeholder = 'Поиск по всем брендам'; q.value = wq;
   const lst = () => {
     box.textContent = '';
     const s = wq.trim().toLowerCase();
-    if (s) {
-      const r = all.filter(t => (t.brand + ' ' + t.line + ' ' + t.name).toLowerCase().includes(s));
-      if (!r.length) box.appendChild(el('div', 'empty', 'Ничего не найдено'));
-      r.forEach(t => box.appendChild(item(t)));
-      return;
-    }
-    const by = {};
-    all.forEach(t => (by[t.brand] = by[t.brand] || []).push(t));
-    const names = Object.keys(by).sort((a, b) => a.localeCompare(b));
-    if (!names.length) { box.appendChild(el('div', 'empty', 'Пока пусто')); return; }
-    const g = el('div', 'grid');
-    names.forEach(n => {
-      const c = el('div', 'bc');
-      c.onclick = () => { wbrand = n; draw(); };
-      c.append(logo(n), el('div', 'n', n), el('div', 'c', by[n].length + ' поз.'));
-      if (by[n].some(isNew)) c.appendChild(el('div', 'nw', 'NEW'));
-      g.appendChild(c);
-    });
-    box.appendChild(g);
+    if (!all.length) { box.appendChild(el('div', 'empty', 'Пока пусто')); return; }
+    if (!flat.wish && !s) { box.appendChild(brandGrid(all, n => { wbrand = n; draw(); })); return; }
+    const r = all.filter(t => (t.brand + ' ' + t.line + ' ' + t.name).toLowerCase().includes(s))
+      .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    if (!r.length) box.appendChild(el('div', 'empty', 'Ничего не найдено'));
+    r.forEach(t => box.appendChild(item(t)));
   };
   q.oninput = () => { wq = q.value; lst(); };
   m.append(q, box);
@@ -466,7 +567,7 @@ function submit() {
     flavor: v('flavor'), str: has('str') ? v('str') : '', score: v('score'), tier: tier, take: take, comment: v('comment') };
   let err = '';
   if (has('base') && (!d.brand || !d.name)) err = 'Выбери бренд и впиши название';
-  else if (has('base') && (CATALOG[d.brand] || []).length && !d.line) err = 'Выбери линейку';
+  else if (has('base') && (CAT[d.brand] || []).length && !d.line) err = 'Выбери линейку';
   else if (has('dir') && !d.dir) err = 'Выбери направление';
   else if (has('tier') && !tier) err = 'Выбери тир';
   else if (has('take') && !take) err = 'Выбери: брать или нет';
@@ -477,7 +578,8 @@ function submit() {
   call({ shelf: 'add', exp: 'experiment', wish: 'add', toShelf: 'toShelf', rate: 'rate', edit: 'edit' }[cur.mode], d, closeForm);
 }
 
-fill($('brand'), Object.keys(CATALOG), 'Выбери бренд');
+buildCat([]);
+fill($('brand'), brandList(), 'Выбери бренд');
 fill($('line'), [], 'Сначала выбери бренд');
 fill($('dir'), DIRS, 'Выбери направление');
 seg('tierSeg', TIERS, v => tier = v);
