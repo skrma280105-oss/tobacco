@@ -547,8 +547,14 @@ function vArch(m) {
   if (!items.length) m.appendChild(el('div', 'empty', 'Архив пуст'));
   items.forEach(t => m.appendChild(card(t, { info: 1, fold: 1,
     note: (t.from === 'shelf' ? 'С полки' : 'Из экспериментов') + (t.n ? ' · оценка ' + t.score.toFixed(1) : ''),
-    btns: [['Изменить', () => openForm('editFull', t)]]
-      .concat(me.admin ? [['Вернуть в «Заказать»', () => call('restore', { id: t.id })]] : []) })));
+    btns: [
+      ['Изменить', () => openForm('editFull', t)],
+      ['Вернуть', () => choose('Куда вернуть «' + t.name + '»?', [
+        ['На полку', () => t.dir ? call('restore', { id: t.id, to: 'shelf' }) : openForm('toShelf', t)],
+        ['В «Заказать»', () => call('restore', { id: t.id, to: 'order' })],
+        ['В «Попробовать»', () => call('restore', { id: t.id, to: 'try' })],
+        ['Отмена']]), 1]
+    ] })));
 }
 
 function openForm(mode, item, pre) {
