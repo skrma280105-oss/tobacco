@@ -41,11 +41,20 @@ nav button{flex:1 1 auto;padding:10px 6px;font-size:12px;color:var(--tx);backgro
 .bc .n{font-weight:600;font-size:14px;word-break:break-word}
 .bc .c{color:var(--mut);font-size:12px;margin-top:2px}
 .nw{position:absolute;top:8px;right:8px;background:var(--ac);color:#111;border-radius:8px;font-size:10px;font-weight:700;padding:2px 6px}
+/* глоссарий */
+.gp{margin:8px 0;font-size:14px;line-height:1.5}
+.gu{margin:8px 0;padding-left:20px;font-size:14px;line-height:1.5}.gu li{margin:4px 0}
+.gw{overflow-x:auto;margin:8px 0}
+.gt{border-collapse:collapse;font-size:13px;width:100%}
+.gt td{border:1px solid var(--br);padding:6px 8px;vertical-align:top;white-space:pre-line;line-height:1.4}
+.gt td:first-child{min-width:84px}
+.gd summary{font-weight:600;font-size:15px;cursor:pointer}
+.gd[open] summary{margin-bottom:6px}
 </style>
 </head>
 <body>
 <div id="app">
-  <div class="top"><h2>Табачная полка</h2><span id="me"></span><button class="btn" id="adm" style="display:none;padding:6px 10px;font-size:13px" onclick="catForm()">⚙ Бренды</button></div>
+  <div class="top"><h2>Табачная полка</h2><span id="me"></span><button class="btn" style="padding:6px 10px;font-size:13px" onclick="tab='gl';glb='';draw()">📖</button><button class="btn" id="adm" style="display:none;padding:6px 10px;font-size:13px" onclick="catForm()">⚙ Бренды</button></div>
   <div id="main"></div>
 </div>
 <nav id="nav"></nav>
@@ -247,7 +256,7 @@ function draw() {
     nav.appendChild(b);
   });
   const m = $('main'); m.textContent = '';
-  ({ shelf: vShelf, mix: vMix, exp: vExp, wish: vWish, arch: vArch })[tab](m);
+  ({ shelf: vShelf, mix: vMix, exp: vExp, wish: vWish, arch: vArch, gl: vGl })[tab](m);
 }
 
 function bigBtn(text, fn) { const b = el('button', 'btn pri', text); b.style.cssText = 'width:100%;margin:10px 0'; b.onclick = fn; return b; }
@@ -310,6 +319,7 @@ function vShelf(m) {
     if (!items.length) { sbrand = ''; draw(); return; }
     const top = el('div', 'btns');
     top.appendChild(mk('← Все бренды', () => { sbrand = ''; draw(); }));
+    top.appendChild(mk('📖 О бренде', () => openGlBrand(sbrand)));
     m.append(top, el('h3', '', sbrand), bigBtn('+ Добавить табак', () => openForm('shelf', null, sbrand)));
     items.forEach(t => m.appendChild(item(t)));
     return;
@@ -519,6 +529,7 @@ function vWish(m) {
     if (!items.length) { wbrand = ''; draw(); return; }
     const top = el('div', 'btns');
     top.appendChild(mk('← Все бренды', () => { wbrand = ''; draw(); }));
+    top.appendChild(mk('📖 О бренде', () => openGlBrand(wbrand)));
     m.append(top, el('h3', '', wbrand), bigBtn('+ Добавить', () => openForm('wish', null, wbrand)));
     items.forEach(t => m.appendChild(item(t)));
     return;
@@ -556,6 +567,117 @@ function vArch(m) {
         ['Отмена']]), 1]
     ] })));
 }
+
+/* ---------- Глоссарий ---------- */
+let GL = null, glb = '', glq = '', glp = null;
+const LAT = { 'А': 'A', 'В': 'B', 'Е': 'E', 'К': 'K', 'М': 'M', 'Н': 'N', 'О': 'O', 'Р': 'P', 'С': 'C', 'Т': 'T', 'Х': 'X' };
+const GL_SUM = 'Краткая информация бренда';
+function nk(s) { return String(s || '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '').replace(/[АВЕКМНОРСТХ]/g, c => LAT[c]); }
+function glFind(name) { const k = nk(name); return (GL || []).find(b => b.keys.some(x => nk(x) === k)) || null; }
+function glHas(b, t) { return b.keys.some(x => nk(x) === nk(t.brand)); }
+function glLoad(cb) {
+  if (GL) return cb();
+  if (!glp) glp = fetch('glossary.json?v=1').then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(j => { GL = j.brands; }).catch(e => { glp = null; throw e; });
+  glp.then(cb).catch(e => note('Не удалось загрузить глоссарий: ' + e.message));
+}
+function openGlBrand(name) {
+  glLoad(() => {
+    const b = glFind(name);
+    if (!b) { note('Бренда «' + name + '» пока нет в глоссарии'); return; }
+    glb = b.name; glq = ''; tab = 'gl'; draw();
+  });
+}
+function rich(p, s) {
+  String(s).split('**').forEach((t, i) => { if (t) p.appendChild(i % 2 ? el('b', '', t) : document.createTextNode(t)); });
+  return p;
+}
+function glBlock(b) {
+  if (b.t === 'p') return rich(el('p', 'gp'), b.x);
+  if (b.t === 'ul') { const u = el('ul', 'gu'); b.x.forEach(i => u.appendChild(rich(el('li'), i))); return u; }
+  const w = el('div', 'gw'), t = el('table', 'gt');
+  b.x.forEach(r => { const tr = el('tr'); r.forEach(c => tr.appendChild(rich(el('td'), c))); t.appendChild(tr); });
+  w.appendChild(t);
+  return w;
+}
+function glLines(b) {
+  if (b._l) return b._l;
+  const out = [];
+  const add = (sec, blocks) => blocks.forEach(k => {
+    if (k.t === 'p') out.push({ sec: sec, text: k.x });
+    else if (k.t === 'ul') k.x.forEach(i => out.push({ sec: sec, text: i }));
+    else k.x.forEach(r => out.push({ sec: sec, text: r.join(' — ') }));
+  });
+  add('', b.intro);
+  b.sec.forEach(s => add(s.title, s.b));
+  return (b._l = out);
+}
+function snip(t, q) {
+  t = t.replace(/\*\*/g, '').replace(/\s+/g, ' ');
+  const i = Math.max(0, t.toLowerCase().indexOf(q)), a = Math.max(0, i - 60);
+  return (a ? '…' : '') + t.slice(a, a + 160) + (a + 160 < t.length ? '…' : '');
+}
+
+function vGl(m) {
+  if (!GL) { m.appendChild(el('div', 'empty', 'Загружаю глоссарий...')); glLoad(draw); return; }
+  const b = glb && GL.find(x => x.name === glb);
+  if (b) {
+    const top = el('div', 'btns');
+    top.appendChild(mk('← Все бренды', () => { glb = ''; draw(); }));
+    m.append(top, el('h3', '', b.name));
+    const mine = data.filter(t => t.status === 'shelf' && glHas(b, t));
+    if (mine.length) {
+      const bar = el('div', 'btns');
+      bar.appendChild(mk('На моей полке: ' + mine.length + ' поз. →', () => { sbrand = mine[0].brand; tab = 'shelf'; draw(); }));
+      m.appendChild(bar);
+    }
+    b.intro.forEach(x => m.appendChild(glBlock(x)));
+    b.sec.slice().sort((x, y) => (y.title === GL_SUM) - (x.title === GL_SUM)).forEach(s => {
+      const d = el('details', 'card gd');
+      if (s.title === GL_SUM) d.open = true;
+      d.appendChild(el('summary', '', s.title));
+      s.b.forEach(x => d.appendChild(glBlock(x)));
+      m.appendChild(d);
+    });
+    return;
+  }
+  const q = el('input'), box = el('div');
+  q.placeholder = 'Поиск по глоссарию (бренд, сырьё, вкус...)'; q.value = glq;
+  const lst = () => {
+    box.textContent = '';
+    const s = glq.trim().toLowerCase();
+    if (!s) {
+      const g = el('div', 'grid');
+      GL.slice().sort((x, y) => x.name.localeCompare(y.name)).forEach(x => {
+        const c = el('div', 'bc'), n = data.filter(t => t.status === 'shelf' && glHas(x, t)).length;
+        const cn = Object.keys(CAT).find(k => nk(k) === nk(x.name)) || x.name;
+        c.onclick = () => { glb = x.name; draw(); };
+        c.append(logo(cn), el('div', 'n', x.name));
+        if (n) c.appendChild(el('div', 'c', 'на полке: ' + n));
+        g.appendChild(c);
+      });
+      box.appendChild(g);
+      return;
+    }
+    let found = 0;
+    GL.forEach(x => {
+      const hits = glLines(x).filter(l => l.text.toLowerCase().includes(s));
+      if (!hits.length && !x.keys.some(k => k.toLowerCase().includes(s))) return;
+      found++;
+      const c = el('div', 'card');
+      c.onclick = () => { glb = x.name; draw(); };
+      c.appendChild(el('div', 'ttl', x.name));
+      hits.slice(0, 3).forEach(h => c.appendChild(el('div', 'sub', (h.sec ? h.sec + ': ' : '') + snip(h.text, s))));
+      if (hits.length > 3) c.appendChild(el('div', 'sub', 'ещё совпадений: ' + (hits.length - 3)));
+      box.appendChild(c);
+    });
+    if (!found) box.appendChild(el('div', 'empty', 'Ничего не найдено'));
+  };
+  q.oninput = () => { glq = q.value; lst(); };
+  m.append(q, box);
+  lst();
+}
+/* ---------- конец глоссария ---------- */
 
 function openForm(mode, item, pre) {
   const M = MODES[mode];
